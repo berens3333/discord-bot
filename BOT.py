@@ -119,4 +119,6 @@ async def inactivos(ctx, dias: int = 30):
     texto = "\n".join(inactivos_list)
     await ctx.send(f"**Inactivos (sin texto ni voz en {dias} días):**\n{texto}")
 
-bot.run(os.getenv("DISCORD_TOKEN"))
+token = os.environ.get("DISCORD_TOKEN")
+print(f"Token found: {token is not None}")
+bot.run(token)
