@@ -118,7 +118,162 @@ async def inactivos(ctx, dias: int = 30):
 
     texto = "\n".join(inactivos_list)
     await ctx.send(f"**Inactivos (sin texto ni voz en {dias} días):**\n{texto}")
+SANCIONES_ARCHIVO = "sanciones.json"
 
+def cargar_sanciones():
+    if os.path.exists(SANCIONES_ARCHIVO):
+        with open(SANCIONES_ARCHIVO, "r") as f:
+            return json.load(f)
+    return {}
+
+def guardar_sanciones(data):
+    with open(SANCIONES_ARCHIVO, "w") as f:
+        json.dump(data, f, indent=2)
+
+@bot.command()
+@commands.has_permissions(manage_roles=True)
+async def sancion(ctx, miembro: discord.Member, *, motivo: str):
+    """Registra una sanción. Uso: !sancion @usuario motivo"""
+    data = cargar_sanciones()
+    uid = str(miembro.id)
+    if uid not in data:
+        data[uid] = []
+    data[uid].append({
+        "motivo": motivo,
+        "fecha": datetime.now(timezone.utc).isoformat(),
+        "por": ctx.author.display_name
+    })
+    guardar_sanciones(data)
+    total = len(data[uid])
+    await ctx.send(f"⚠️ Sanción registrada a **{miembro.display_name}**.\nMotivo: {motivo}\nTotal de avisos: **{total}**")
+    if total >= 2:
+        await ctx.send(f"🚨 **{miembro.display_name}** lleva {total} avisos. Considera expulsarlo.")
+
+@bot.command()
+async def sanciones(ctx, miembro: discord.Member):
+    """Ver sanciones de un miembro. Uso: !sanciones @usuario"""
+    data = cargar_sanciones()
+    uid = str(miembro.id)
+    if uid not in data or not data[uid]:
+        await ctx.send(f"✅ {miembro.display_name} no tiene sanciones.")
+        return
+    lineas = [f"**Sanciones de {miembro.display_name}:**"]
+    for i, s in enumerate(data[uid], 1):
+        fecha = datetime.fromisoformat(s['fecha']).strftime("%d/%m/%Y")
+        lineas.append(f"{i}. `{fecha}` — {s['motivo']} *(por {s['por']})*")
+    await ctx.send("\n".join(lineas))
+
+@bot.command()
+@commands.has_permissions(manage_roles=True)
+async def limpiar_sanciones(ctx, miembro: discord.Member):
+    """Borra todas las sanciones de un miembro. Uso: !limpiar_sanciones @usuario"""
+    data = cargar_sanciones()
+    uid = str(miembro.id)
+    if uid in data:
+        del data[uid]
+        guardar_sanciones(data)
+    await ctx.send(f"✅ Sanciones de **{miembro.display_name}** eliminadas.")
+TICKETS_ARCHIVO = "tickets.json"
+
+def cargar_tickets():
+    if os.path.exists(TICKETS_ARCHIVO):
+        with open(TICKETS_ARCHIVO, "r") as f:
+            return json.load(f)
+    return {}
+
+def guardar_tickets(data):
+    with open(TICKETS_ARCHIVO, "w") as f:
+        json.dump(data, f, indent=2)
+
+@bot.command()
+@commands.has_permissions(manage_roles=True)
+async def ticket(ctx, *, nombre: str):
+    """Abre el proceso de votación para un ticket. Uso: !ticket NombreDelJugador"""
+    data = cargar_tickets()
+    clave = nombre.lower()
+    if clave in data and data[clave]["estado"] == "pendiente":
+        await ctx.send(f"⚠️ Ya hay un ticket abierto para **{nombre}**.")
+        return
+    data[clave] = {
+        "nombre": nombre,
+        "estado": "pendiente",
+        "votos_si": [],
+        "votos_no": [],
+        "abierto_por": ctx.author.display_name,
+        "fecha": datetime.now(timezone.utc).isoformat()
+    }
+    guardar_tickets(data)
+    await ctx.send(f"🎫 Ticket abierto para **{nombre}**.\nEl staff puede votar con `!votar {nombre} si/no`")
+
+@bot.command()
+@commands.has_permissions(manage_roles=True)
+async def votar(ctx, nombre: str, voto: str):
+    """Vota por un ticket. Uso: !votar NombreDelJugador si/no"""
+    data = cargar_tickets()
+    clave = nombre.lower()
+    voter = str(ctx.author.id)
+    voto = voto.lower()
+
+    if clave not in data or data[clave]["estado"] != "pendiente":
+        await ctx.send(f"❌ No hay ningún ticket abierto para **{nombre}**.")
+        return
+    if voto not in ("si", "no"):
+        await ctx.send("❌ El voto debe ser `si` o `no`.")
+        return
+    if voter in data[clave]["votos_si"] or voter in data[clave]["votos_no"]:
+        await ctx.send("⚠️ Ya has votado para este ticket.")
+        return
+
+    if voto == "si":
+        data[clave]["votos_si"].append(voter)
+    else:
+        data[clave]["votos_no"].append(voter)
+
+    guardar_tickets(data)
+    total_si = len(data[clave]["votos_si"])
+    total_no = len(data[clave]["votos_no"])
+    await ctx.send(f"✅ Voto registrado.\n**{nombre}** — 👍 {total_si} a favor / 👎 {total_no} en contra")
+
+@bot.command()
+@commands.has_permissions(manage_roles=True)
+async def resultado(ctx, *, nombre: str):
+    """Cierra la votación y muestra el resultado. Uso: !resultado NombreDelJugador"""
+    data = cargar_tickets()
+    clave = nombre.lower()
+
+    if clave not in data or data[clave]["estado"] != "pendiente":
+        await ctx.send(f"❌ No hay ningún ticket abierto para **{nombre}**.")
+        return
+
+    total_si = len(data[clave]["votos_si"])
+    total_no = len(data[clave]["votos_no"])
+    entra = total_si >= 4
+
+    data[clave]["estado"] = "aceptado" if entra else "rechazado"
+    guardar_tickets(data)
+
+    if entra:
+        await ctx.send(f"✅ **{nombre}** entra en la banda.\n👍 {total_si} a favor / 👎 {total_no} en contra")
+    else:
+        await ctx.send(f"❌ **{nombre}** no entra en la banda.\n👍 {total_si} a favor / 👎 {total_no} en contra")
+
+@bot.command()
+@commands.has_permissions(manage_roles=True)
+async def tickets(ctx):
+    """Lista todos los tickets pendientes de votación."""
+    data = cargar_tickets()
+    pendientes = [(v["nombre"], len(v["votos_si"]), len(v["votos_no"])) for v in data.values() if v["estado"] == "pendiente"]
+
+    if not pendientes:
+        await ctx.send("No hay tickets abiertos.")
+        return
+
+    lineas = ["**Tickets pendientes de votación:**"]
+    for nombre, si, no in pendientes:
+        lineas.append(f"• **{nombre}** — 👍 {si} / 👎 {no}")
+    await ctx.send("\n".join(lineas))
+
+    
 token = os.environ.get("DISCORD_TOKEN")
 print(f"Token found: {token is not None}")
 bot.run(token)

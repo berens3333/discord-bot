@@ -1,0 +1,12 @@
+{
+  "30": {
+    "nombre": "30",
+    "estado": "rechazado",
+    "votos_si": [
+      "621815885983645716"
+    ],
+    "votos_no": [],
+    "abierto_por": "izan",
+    "fecha": "2026-06-13T02:44:35.053220+00:00"
+  }
+}
