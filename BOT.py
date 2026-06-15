@@ -132,47 +132,48 @@ def guardar_sanciones(data):
 
 @bot.command()
 @commands.has_permissions(manage_roles=True)
-async def sancion(ctx, miembro: discord.Member, *, motivo: str):
-    """Registra una sanción. Uso: !sancion @usuario motivo"""
+async def sancion(ctx, nombre: str, *, motivo: str):
+    """Registra una sanción. Uso: !sancion NombreDelJugador motivo"""
     data = cargar_sanciones()
-    uid = str(miembro.id)
-    if uid not in data:
-        data[uid] = []
-    data[uid].append({
+    clave = nombre.lower()
+    if clave not in data:
+        data[clave] = {"nombre": nombre, "sanciones": []}
+    data[clave]["sanciones"].append({
         "motivo": motivo,
         "fecha": datetime.now(timezone.utc).isoformat(),
         "por": ctx.author.display_name
     })
     guardar_sanciones(data)
-    total = len(data[uid])
-    await ctx.send(f"⚠️ Sanción registrada a **{miembro.display_name}**.\nMotivo: {motivo}\nTotal de avisos: **{total}**")
+    total = len(data[clave]["sanciones"])
+    await ctx.send(f"⚠️ Sanción registrada a **{nombre}**.\nMotivo: {motivo}\nTotal de avisos: **{total}**")
     if total >= 2:
-        await ctx.send(f"🚨 **{miembro.display_name}** lleva {total} avisos. Considera expulsarlo.")
+        await ctx.send(f"🚨 **{nombre}** lleva {total} avisos. Considera expulsarlo.")
 
 @bot.command()
-async def sanciones(ctx, miembro: discord.Member):
-    """Ver sanciones de un miembro. Uso: !sanciones @usuario"""
+@commands.has_permissions(manage_roles=True)
+async def sanciones(ctx, *, nombre: str):
+    """Ver sanciones de un miembro. Uso: !sanciones NombreDelJugador"""
     data = cargar_sanciones()
-    uid = str(miembro.id)
-    if uid not in data or not data[uid]:
-        await ctx.send(f"✅ {miembro.display_name} no tiene sanciones.")
+    clave = nombre.lower()
+    if clave not in data or not data[clave]["sanciones"]:
+        await ctx.send(f"✅ {nombre} no tiene sanciones.")
         return
-    lineas = [f"**Sanciones de {miembro.display_name}:**"]
-    for i, s in enumerate(data[uid], 1):
+    lineas = [f"**Sanciones de {nombre}:**"]
+    for i, s in enumerate(data[clave]["sanciones"], 1):
         fecha = datetime.fromisoformat(s['fecha']).strftime("%d/%m/%Y")
         lineas.append(f"{i}. `{fecha}` — {s['motivo']} *(por {s['por']})*")
     await ctx.send("\n".join(lineas))
 
 @bot.command()
 @commands.has_permissions(manage_roles=True)
-async def limpiar_sanciones(ctx, miembro: discord.Member):
-    """Borra todas las sanciones de un miembro. Uso: !limpiar_sanciones @usuario"""
+async def limpiar_sanciones(ctx, *, nombre: str):
+    """Borra todas las sanciones de un miembro. Uso: !limpiar_sanciones NombreDelJugador"""
     data = cargar_sanciones()
-    uid = str(miembro.id)
-    if uid in data:
-        del data[uid]
+    clave = nombre.lower()
+    if clave in data:
+        del data[clave]
         guardar_sanciones(data)
-    await ctx.send(f"✅ Sanciones de **{miembro.display_name}** eliminadas.")
+    await ctx.send(f"✅ Sanciones de **{nombre}** eliminadas.")
 TICKETS_ARCHIVO = "tickets.json"
 
 def cargar_tickets():
